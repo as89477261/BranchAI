@@ -24,6 +24,7 @@ namespace DBAnalyzer
         private readonly LlmService _llmService = new LlmService();
         private readonly DbdService _dbdService = new DbdService();
         private readonly DbdScraperService _scraperService = new DbdScraperService();
+        private readonly PlaywrightScraperService _playwrightScraper = new PlaywrightScraperService();
         private readonly ObservableCollection<DbConnectionInfo> _connections = new ObservableCollection<DbConnectionInfo>();
         private readonly ObservableCollection<ContextItem> _contextItems = new ObservableCollection<ContextItem>();
         private const string SettingsFile = "appsettings.json";
@@ -395,7 +396,7 @@ namespace DBAnalyzer
                 Clipboard.SetText(TxtScraperLog.Text);
         }
 
-        // ── DBD DataWarehouse Scraper ──────────────────────────────────────────
+        // ── DBD DataWarehouse Scraper (Playwright) ────────────────────────────
 
         private async void BtnScrapeDatawarehouse_Click(object sender, RoutedEventArgs e)
         {
@@ -409,36 +410,35 @@ namespace DBAnalyzer
 
             BtnScrapeDatawarehouse.IsEnabled = false;
             ClearLog();
-            SetBusy("กำลัง scrape DBD DataWarehouse...");
-
-            // Run profile scrape
-            var (profileItem, profileLog) = await _scraperService.ScrapeAsync(
-                id, line => AppendLog(line));
-
-            // Run financial scrape regardless (separate endpoint)
+            SetBusy("กำลัง scrape DBD DataWarehouse ด้วย Playwright...");
+            AppendLog("ℹ  ใช้ Playwright (headless Chrome) — รองรับ SPA/JavaScript rendering");
+            AppendLog($"ℹ  URL: https://datawarehouse.dbd.go.th/company/profile/{id}");
             AppendLog("");
-            AppendLog("────────────────────────────────");
-            var (finItem, finLog) = await _scraperService.ScrapeFinancialAsync(
+
+            var (items, _) = await _playwrightScraper.ScrapeAllTabsAsync(
                 id, line => AppendLog(line));
 
             SetBusy(null);
             BtnScrapeDatawarehouse.IsEnabled = true;
 
-            int added = 0;
-            if (profileItem != null) { _contextItems.Insert(0, profileItem); added++; }
-            if (finItem    != null) { _contextItems.Insert(profileItem != null ? 1 : 0, finItem); added++; }
-
-            if (added > 0)
+            if (items.Count > 0)
             {
+                // Insert at top of context, newest first
+                for (int i = items.Count - 1; i >= 0; i--)
+                    _contextItems.Insert(0, items[i]);
+
                 TxtEmptyContext.Visibility = Visibility.Collapsed;
-                SetStatus($"✔ Scrape DBD DataWarehouse สำเร็จ ({added} block)", true);
-                AppendLog($"\n✅ เพิ่ม {added} block ลงใน Context แล้ว");
+                SetStatus($"✔ Playwright scrape สำเร็จ — เพิ่ม {items.Count} ชุดข้อมูล", true);
+                AppendLog($"\n✅ เพิ่ม {items.Count} ชุดข้อมูลลงใน Context แล้ว");
             }
             else
             {
-                SetStatus("⚠ Scrape DBD DataWarehouse ล้มเหลว — ดู log สำหรับรายละเอียด", false);
+                SetStatus("⚠ Scrape ไม่ได้ข้อมูล — ดู log สำหรับรายละเอียด", false);
                 AppendLog("\n⚠ ไม่มีข้อมูลถูกเพิ่มเข้า Context");
-                AppendLog("💡 อ่าน log ด้านบนเพื่อ debug หรือส่ง log ให้ developer");
+                AppendLog("💡 ตรวจสอบ:");
+                AppendLog("   1. Chrome ติดตั้งอยู่ที่ Program Files หรือไม่");
+                AppendLog("   2. เครือข่ายเข้า datawarehouse.dbd.go.th ได้หรือไม่");
+                AppendLog("   3. เลข 13 หลักเป็นนิติบุคคลที่มีข้อมูลในระบบ DBD หรือไม่");
             }
         }
 
