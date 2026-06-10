@@ -1,6 +1,5 @@
 using System;
 using System.Collections.ObjectModel;
-using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -8,6 +7,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using DBAnalyzer.Models;
 using DBAnalyzer.Services;
 using Microsoft.Win32;
@@ -25,21 +25,27 @@ namespace DBAnalyzer
         private readonly ObservableCollection<ContextItem> _contextItems = new ObservableCollection<ContextItem>();
         private const string SettingsFile = "appsettings.json";
 
-        // Tracks which connection is currently loaded in the edit form
-        private DbConnectionInfo? _editingConnection = null;
+        // Editing state
+        private DbConnectionInfo? _editingConnection;
+
+        // Queries for the currently selected connection — bound to LstQueries
+        private readonly ObservableCollection<QueryItem> _currentQueries = new ObservableCollection<QueryItem>();
+        private QueryItem? _editingQuery;
+        private bool _suppressQueryEditorSync = false;
 
         public MainWindow()
         {
             InitializeComponent();
             QuestPDF.Settings.License = LicenseType.Community;
             LstConnections.ItemsSource = _connections;
+            LstQueries.ItemsSource     = _currentQueries;
             ContextItemsPanel.ItemsSource = _contextItems;
             _contextItems.CollectionChanged += (_, _) => UpdateContextSummary();
             LoadSettings();
         }
 
         // ────────────────────────────────────────────────────────────
-        // Settings persistence
+        // Settings
         // ────────────────────────────────────────────────────────────
 
         private void LoadSettings()
@@ -47,8 +53,9 @@ namespace DBAnalyzer
             try
             {
                 if (!File.Exists(SettingsFile)) return;
-                var doc = JsonDocument.Parse(File.ReadAllText(SettingsFile));
+                var doc  = JsonDocument.Parse(File.ReadAllText(SettingsFile));
                 var root = doc.RootElement;
+
                 if (root.TryGetProperty("LlmApiUrl", out var url))
                     TxtApiUrl.Text = url.GetString() ?? TxtApiUrl.Text;
 
@@ -56,16 +63,25 @@ namespace DBAnalyzer
                 {
                     foreach (var c in conns.EnumerateArray())
                     {
-                        _connections.Add(new DbConnectionInfo
+                        var conn = new DbConnectionInfo
                         {
-                            Name           = c.GetStringProp("Name"),
-                            Server         = c.GetStringProp("Server"),
-                            Database       = c.GetStringProp("Database"),
-                            Username       = c.GetStringProp("Username"),
-                            Password       = c.GetStringProp("Password"),
+                            Name           = c.GetStr("Name"),
+                            Server         = c.GetStr("Server"),
+                            Database       = c.GetStr("Database"),
+                            Username       = c.GetStr("Username"),
+                            Password       = c.GetStr("Password"),
                             UseWindowsAuth = c.TryGetProperty("UseWindowsAuth", out var wa) && wa.GetBoolean(),
-                            SqlQuery       = c.GetStringProp("SqlQuery", "SELECT TOP 100 * FROM "),
-                        });
+                        };
+                        if (c.TryGetProperty("Queries", out var qs))
+                        {
+                            foreach (var q in qs.EnumerateArray())
+                                conn.Queries.Add(new QueryItem
+                                {
+                                    Name = q.GetStr("Name", "Query"),
+                                    Sql  = q.GetStr("Sql", "SELECT TOP 100 * FROM "),
+                                });
+                        }
+                        _connections.Add(conn);
                     }
                 }
             }
@@ -82,8 +98,8 @@ namespace DBAnalyzer
                     Connections = _connections.Select(c => new
                     {
                         c.Name, c.Server, c.Database,
-                        c.Username, c.Password,
-                        c.UseWindowsAuth, c.SqlQuery
+                        c.Username, c.Password, c.UseWindowsAuth,
+                        Queries = c.Queries.Select(q => new { q.Name, q.Sql })
                     })
                 };
                 File.WriteAllText(SettingsFile,
@@ -103,6 +119,39 @@ namespace DBAnalyzer
         }
 
         // ────────────────────────────────────────────────────────────
+        // Customer ID validation
+        // ────────────────────────────────────────────────────────────
+
+        private void TxtCustomerId_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            // Allow only digits
+            var text  = TxtCustomerId.Text;
+            var clean = new string(text.Where(char.IsDigit).ToArray());
+            if (clean != text)
+            {
+                TxtCustomerId.Text = clean;
+                TxtCustomerId.CaretIndex = clean.Length;
+                return;
+            }
+
+            if (clean.Length == 0)
+            {
+                TxtIdValidation.Text       = string.Empty;
+                TxtIdValidation.Foreground = Brushes.Transparent;
+            }
+            else if (clean.Length < 13)
+            {
+                TxtIdValidation.Text       = $"ยังขาดอีก {13 - clean.Length} หลัก";
+                TxtIdValidation.Foreground = (Brush)FindResource("ErrorColor");
+            }
+            else
+            {
+                TxtIdValidation.Text       = "✔  ครบ 13 หลัก";
+                TxtIdValidation.Foreground = (Brush)FindResource("SuccessColor");
+            }
+        }
+
+        // ────────────────────────────────────────────────────────────
         // Analysis Tab — Fetch Data
         // ────────────────────────────────────────────────────────────
 
@@ -110,35 +159,62 @@ namespace DBAnalyzer
         {
             if (_connections.Count == 0)
             {
-                MessageBox.Show("No data sources configured.\nGo to the \"Data Sources\" tab to add a connection.",
+                MessageBox.Show("ยังไม่มี connection\nไปที่ Tab \"Data Sources\" เพื่อเพิ่ม",
                     "No Sources", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            var missing = _connections.Where(c => string.IsNullOrWhiteSpace(c.SqlQuery)).ToList();
-            if (missing.Count == _connections.Count)
+            var allQueries = _connections.SelectMany(c =>
+                c.Queries.Select(q => (conn: c, query: q))).ToList();
+
+            if (allQueries.Count == 0)
             {
-                MessageBox.Show("All connections are missing a SQL query.\nEdit them in the \"Data Sources\" tab.",
+                MessageBox.Show("ยังไม่มี SQL Query\nไปที่ Tab \"Data Sources\" เพื่อเพิ่ม Query ให้แต่ละ connection",
                     "No Queries", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
+            var idValue = TxtCustomerId.Text.Trim();
+
             BtnFetchData.IsEnabled = false;
-            SetBusy($"Fetching data from {_connections.Count} source(s)...");
+            SetBusy($"กำลังดึงข้อมูล {allQueries.Count} query จาก {_connections.Count} source...");
             _contextItems.Clear();
             TxtEmptyContext.Visibility = Visibility.Collapsed;
 
+            // Run queries sequentially in declared order
             int ok = 0, fail = 0;
-            var tasks = _connections
-                .Where(c => !string.IsNullOrWhiteSpace(c.SqlQuery))
-                .Select(c => FetchOne(c))
-                .ToList();
-
-            var results = await Task.WhenAll(tasks);
-            foreach (var (item, error) in results)
+            foreach (var (conn, query) in allQueries)
             {
-                if (item != null) { _contextItems.Add(item); ok++; }
-                else fail++;
+                SetBusy($"กำลังรัน: [{conn.Name}] {query.Name}...");
+                var sql = query.Sql.Replace("{ID}", idValue);
+                var (data, error) = await _databaseService.ExecuteQueryAsync(conn, sql);
+
+                if (!string.IsNullOrEmpty(error))
+                {
+                    var errItem = new ContextItem
+                    {
+                        Header  = $"❌  {conn.Name} — {query.Name}",
+                        RawText = $"[{conn.Name} / {query.Name}] Error: {error}\n"
+                    };
+                    _contextItems.Add(errItem);
+                    fail++;
+                }
+                else if (data == null || data.Rows.Count == 0)
+                {
+                    var emptyItem = new ContextItem
+                    {
+                        Header  = $"{conn.Name} — {query.Name}  (0 rows)",
+                        RawText = $"[{conn.Name} / {query.Name}] No rows returned.\n"
+                    };
+                    _contextItems.Add(emptyItem);
+                    ok++;
+                }
+                else
+                {
+                    var item = _databaseService.DataTableToContextItem(data, $"{conn.Name} / {query.Name}");
+                    _contextItems.Add(item);
+                    ok++;
+                }
             }
 
             SetBusy(null);
@@ -147,43 +223,23 @@ namespace DBAnalyzer
             if (_contextItems.Count == 0)
                 TxtEmptyContext.Visibility = Visibility.Visible;
 
-            var msg = $"Fetched {ok} source(s) successfully.";
-            if (fail > 0) msg += $"  {fail} source(s) failed.";
+            var msg = $"โหลดสำเร็จ {ok} query";
+            if (fail > 0) msg += $"  |  ล้มเหลว {fail} query";
+            if (!string.IsNullOrEmpty(idValue)) msg += $"  |  ID: {idValue}";
             SetStatus(msg, fail == 0);
-        }
-
-        private async Task<(ContextItem? item, string error)> FetchOne(DbConnectionInfo conn)
-        {
-            var (data, error) = await _databaseService.ExecuteQueryAsync(conn, conn.SqlQuery);
-            if (!string.IsNullOrEmpty(error))
-            {
-                Dispatcher.Invoke(() =>
-                    SetStatus($"Error on {conn.Name}: {error}", false));
-                return (null, error);
-            }
-            if (data == null || data.Rows.Count == 0)
-            {
-                var empty = new ContextItem
-                {
-                    Header  = $"{conn.Name}  —  0 rows",
-                    RawText = $"[{conn.Name}] No rows returned.\n"
-                };
-                return (empty, string.Empty);
-            }
-            return (_databaseService.DataTableToContextItem(data, conn.Name), string.Empty);
         }
 
         private void UpdateContextSummary()
         {
             if (_contextItems.Count == 0)
             {
-                TxtContextSummary.Text = "No data loaded yet. Configure sources in the Data Sources tab.";
+                TxtContextSummary.Text = "ยังไม่มีข้อมูล — กรอก ID และกด Fetch";
                 TxtEmptyContext.Visibility = Visibility.Visible;
             }
             else
             {
                 int total = _contextItems.Sum(i => i.Rows.Count);
-                TxtContextSummary.Text = $"{_contextItems.Count} source(s) loaded  ·  {total} total row(s)";
+                TxtContextSummary.Text = $"{_contextItems.Count} query loaded  ·  {total} total rows";
                 TxtEmptyContext.Visibility = Visibility.Collapsed;
             }
         }
@@ -203,22 +259,20 @@ namespace DBAnalyzer
             var prompt = TxtPrompt.Text.Trim();
             if (string.IsNullOrWhiteSpace(prompt))
             {
-                MessageBox.Show("Please enter a prompt.", "Empty Prompt",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("กรุณาใส่ Prompt", "Empty Prompt", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             var apiUrl = TxtApiUrl.Text.Trim();
             if (string.IsNullOrWhiteSpace(apiUrl))
             {
-                MessageBox.Show("Please configure the LLM API URL.", "No API URL",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("กรุณาตั้งค่า LLM API URL", "No API URL", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             BtnSendToLlm.IsEnabled = false;
             BtnExportPdf.IsEnabled = false;
-            SetBusy("Sending to LLM...");
-            TxtLlmResponse.Text = "Waiting for response...";
+            SetBusy("กำลังส่งไป LLM...");
+            TxtLlmResponse.Text = "รอผลลัพธ์...";
 
             var aggregated = string.Join("\n", _contextItems.Select(i => i.RawText));
             var (response, error) = await _llmService.SendMessageAsync(apiUrl, aggregated, prompt);
@@ -229,7 +283,7 @@ namespace DBAnalyzer
             if (!string.IsNullOrEmpty(error))
             {
                 TxtLlmResponse.Text = $"Error: {error}";
-                SetStatus($"LLM call failed: {error}", false);
+                SetStatus($"LLM failed: {error}", false);
             }
             else
             {
@@ -242,7 +296,7 @@ namespace DBAnalyzer
 
         private void BtnClearResponse_Click(object sender, RoutedEventArgs e)
         {
-            TxtLlmResponse.Text = string.Empty;
+            TxtLlmResponse.Text    = string.Empty;
             BtnExportPdf.IsEnabled = false;
         }
 
@@ -251,14 +305,14 @@ namespace DBAnalyzer
             var response = TxtLlmResponse.Text.Trim();
             if (string.IsNullOrWhiteSpace(response))
             {
-                MessageBox.Show("No LLM response to export.", "Nothing to Export",
+                MessageBox.Show("ยังไม่มี LLM response", "Nothing to Export",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             var dlg = new SaveFileDialog
             {
-                Title      = "Save Analysis Report as PDF",
+                Title      = "บันทึกรายงานเป็น PDF",
                 Filter     = "PDF Files (*.pdf)|*.pdf",
                 FileName   = $"Analysis_{DateTime.Now:yyyyMMdd_HHmmss}.pdf",
                 DefaultExt = ".pdf"
@@ -267,8 +321,9 @@ namespace DBAnalyzer
 
             try
             {
-                SetBusy("Generating PDF...");
+                SetBusy("กำลังสร้าง PDF...");
                 var prompt    = TxtPrompt.Text.Trim();
+                var customerId = TxtCustomerId.Text.Trim();
                 var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
                 Document.Create(container =>
@@ -284,11 +339,15 @@ namespace DBAnalyzer
                             col.Item().Row(row =>
                             {
                                 row.RelativeItem()
-                                    .Text("DB Analyzer — Analysis Report")
-                                    .FontSize(18).Bold().FontColor("#4A3FBF");
+                                   .Text("DB Analyzer — Analysis Report")
+                                   .FontSize(18).Bold().FontColor("#4A3FBF");
                                 row.ConstantItem(140).AlignRight()
-                                    .Text(timestamp).FontSize(9).FontColor("#888888");
+                                   .Text(timestamp).FontSize(9).FontColor("#888888");
                             });
+                            if (!string.IsNullOrEmpty(customerId))
+                                col.Item().PaddingTop(4)
+                                   .Text($"Customer/Patient ID: {customerId}")
+                                   .FontSize(11).FontColor("#555555");
                             col.Item().PaddingTop(4).LineHorizontal(1).LineColor("#CCCCCC");
                         });
 
@@ -298,12 +357,12 @@ namespace DBAnalyzer
                             {
                                 col.Item().Text("Prompt").FontSize(13).Bold().FontColor("#333333");
                                 col.Item().PaddingTop(4).PaddingBottom(14)
-                                    .Background("#F5F5FA").Padding(10)
-                                    .Text(prompt).FontSize(11).FontColor("#444444");
+                                   .Background("#F5F5FA").Padding(10)
+                                   .Text(prompt).FontSize(11).FontColor("#444444");
                             }
                             col.Item().Text("Analysis Result").FontSize(13).Bold().FontColor("#333333");
                             col.Item().PaddingTop(6)
-                                .Text(response).FontSize(11).LineHeight(1.55f);
+                               .Text(response).FontSize(11).LineHeight(1.55f);
                         });
 
                         page.Footer().AlignCenter().Text(t =>
@@ -318,20 +377,20 @@ namespace DBAnalyzer
 
                 SetBusy(null);
                 SetStatus($"PDF saved: {dlg.FileName}", true);
-                MessageBox.Show($"PDF saved successfully:\n{dlg.FileName}", "Export Complete",
+                MessageBox.Show($"บันทึก PDF สำเร็จ:\n{dlg.FileName}", "Export Complete",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 SetBusy(null);
-                SetStatus($"PDF export failed: {ex.Message}", false);
-                MessageBox.Show($"Failed to generate PDF:\n{ex.Message}", "Export Error",
+                SetStatus($"PDF failed: {ex.Message}", false);
+                MessageBox.Show($"ไม่สามารถสร้าง PDF:\n{ex.Message}", "Export Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         // ────────────────────────────────────────────────────────────
-        // Data Sources Tab — Connection List
+        // Data Sources Tab — Connection CRUD
         // ────────────────────────────────────────────────────────────
 
         private void BtnAddConnection_Click(object sender, RoutedEventArgs e)
@@ -344,19 +403,16 @@ namespace DBAnalyzer
 
         private void BtnRemoveConnection_Click(object sender, RoutedEventArgs e)
         {
-            if (LstConnections.SelectedItem is DbConnectionInfo conn)
-            {
-                var r = MessageBox.Show($"Remove \"{conn.Name}\"?", "Confirm Remove",
-                    MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (r != MessageBoxResult.Yes) return;
-
-                _connections.Remove(conn);
-                _editingConnection = null;
-                EditPanel.IsEnabled = false;
-                TxtEditHeader.Text = "Select a connection to edit";
-                ClearEditForm();
-                SaveSettings();
-            }
+            if (LstConnections.SelectedItem is not DbConnectionInfo conn) return;
+            var r = MessageBox.Show($"ลบ \"{conn.Name}\" ?", "Confirm Remove",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (r != MessageBoxResult.Yes) return;
+            _connections.Remove(conn);
+            _editingConnection = null;
+            EditPanel.IsEnabled = false;
+            TxtEditHeader.Text = "Select a connection to edit";
+            ClearConnectionForm();
+            SaveSettings();
         }
 
         private void BtnDuplicateConnection_Click(object sender, RoutedEventArgs e)
@@ -370,7 +426,7 @@ namespace DBAnalyzer
                 Username       = src.Username,
                 Password       = src.Password,
                 UseWindowsAuth = src.UseWindowsAuth,
-                SqlQuery       = src.SqlQuery
+                Queries        = src.Queries.Select(q => new QueryItem { Name = q.Name, Sql = q.Sql }).ToList()
             };
             _connections.Add(copy);
             LstConnections.SelectedItem = copy;
@@ -389,33 +445,38 @@ namespace DBAnalyzer
             EditPanel.IsEnabled = true;
             TxtEditHeader.Text  = $"Editing: {conn.Name}";
 
-            TxtEditName.Text     = conn.Name;
-            TxtEditServer.Text   = conn.Server;
-            TxtEditDatabase.Text = conn.Database;
-            TxtEditUsername.Text = conn.Username;
+            TxtEditName.Text         = conn.Name;
+            TxtEditServer.Text       = conn.Server;
+            TxtEditDatabase.Text     = conn.Database;
+            TxtEditUsername.Text     = conn.Username;
             PwdEditPassword.Password = conn.Password;
             ChkWindowsAuth.IsChecked = conn.UseWindowsAuth;
-            TxtEditQuery.Text    = conn.SqlQuery;
-
             CredentialsPanel.Visibility = conn.UseWindowsAuth ? Visibility.Collapsed : Visibility.Visible;
+
+            // Load queries
+            _currentQueries.Clear();
+            foreach (var q in conn.Queries)
+                _currentQueries.Add(q);
+
+            ClearQueryEditor();
         }
 
-        private void ClearEditForm()
+        private void ClearConnectionForm()
         {
-            TxtEditName.Text     = string.Empty;
-            TxtEditServer.Text   = string.Empty;
-            TxtEditDatabase.Text = string.Empty;
-            TxtEditUsername.Text = string.Empty;
+            TxtEditName.Text         = string.Empty;
+            TxtEditServer.Text       = string.Empty;
+            TxtEditDatabase.Text     = string.Empty;
+            TxtEditUsername.Text     = string.Empty;
             PwdEditPassword.Password = string.Empty;
             ChkWindowsAuth.IsChecked = false;
-            TxtEditQuery.Text    = string.Empty;
+            _currentQueries.Clear();
+            ClearQueryEditor();
         }
 
         private void ChkWindowsAuth_Changed(object sender, RoutedEventArgs e)
         {
             CredentialsPanel.Visibility = ChkWindowsAuth.IsChecked == true
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+                ? Visibility.Collapsed : Visibility.Visible;
         }
 
         private void BtnSaveConnection_Click(object sender, RoutedEventArgs e)
@@ -424,14 +485,14 @@ namespace DBAnalyzer
 
             if (string.IsNullOrWhiteSpace(TxtEditName.Text))
             {
-                MessageBox.Show("Connection name cannot be empty.", "Validation",
+                MessageBox.Show("Connection name ห้ามว่าง", "Validation",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             if (string.IsNullOrWhiteSpace(TxtEditServer.Text) ||
                 string.IsNullOrWhiteSpace(TxtEditDatabase.Text))
             {
-                MessageBox.Show("Server and Database are required.", "Validation",
+                MessageBox.Show("กรุณาระบุ Server และ Database", "Validation",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -442,9 +503,9 @@ namespace DBAnalyzer
             _editingConnection.Username       = TxtEditUsername.Text.Trim();
             _editingConnection.Password       = PwdEditPassword.Password;
             _editingConnection.UseWindowsAuth = ChkWindowsAuth.IsChecked == true;
-            _editingConnection.SqlQuery       = TxtEditQuery.Text;
+            _editingConnection.Queries        = _currentQueries.ToList();
 
-            // Refresh ListBox display (force re-render of item template)
+            // Refresh ListBox (force re-render)
             var idx = LstConnections.SelectedIndex;
             LstConnections.ItemsSource = null;
             LstConnections.ItemsSource = _connections;
@@ -452,19 +513,17 @@ namespace DBAnalyzer
 
             TxtEditHeader.Text = $"Editing: {_editingConnection.Name}";
             SaveSettings();
-            SetStatus($"Connection \"{_editingConnection.Name}\" saved.", true);
+            SetStatus($"Saved: {_editingConnection.Name}", true);
         }
 
         private async void BtnTestConnection_Click(object sender, RoutedEventArgs e)
         {
             if (_editingConnection == null)
             {
-                MessageBox.Show("Select a connection first.", "No Selection",
+                MessageBox.Show("เลือก connection ก่อน", "No Selection",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
-            // Use current form values for the test (may not be saved yet)
             var temp = new DbConnectionInfo
             {
                 Server         = TxtEditServer.Text.Trim(),
@@ -473,11 +532,9 @@ namespace DBAnalyzer
                 Password       = PwdEditPassword.Password,
                 UseWindowsAuth = ChkWindowsAuth.IsChecked == true
             };
-
-            SetBusy($"Testing connection to {temp.Server}...");
+            SetBusy($"กำลัง test connection ไปยัง {temp.Server}...");
             var (success, message) = await _databaseService.TestConnectionAsync(temp);
             SetBusy(null);
-
             MessageBox.Show(message,
                 success ? "Connection Successful" : "Connection Failed",
                 MessageBoxButton.OK,
@@ -486,21 +543,104 @@ namespace DBAnalyzer
         }
 
         // ────────────────────────────────────────────────────────────
+        // Data Sources Tab — Query CRUD
+        // ────────────────────────────────────────────────────────────
+
+        private void BtnAddQuery_Click(object sender, RoutedEventArgs e)
+        {
+            if (_editingConnection == null) return;
+            var q = new QueryItem { Name = $"Query {_currentQueries.Count + 1}" };
+            _currentQueries.Add(q);
+            LstQueries.SelectedItem = q;
+        }
+
+        private void BtnRemoveQuery_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstQueries.SelectedItem is not QueryItem q) return;
+            _currentQueries.Remove(q);
+            if (_editingQuery == q)
+            {
+                _editingQuery = null;
+                ClearQueryEditor();
+            }
+        }
+
+        private void BtnMoveQueryUp_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstQueries.SelectedItem is not QueryItem q) return;
+            var idx = _currentQueries.IndexOf(q);
+            if (idx <= 0) return;
+            _currentQueries.Move(idx, idx - 1);
+            LstQueries.SelectedItem = q;
+        }
+
+        private void BtnMoveQueryDown_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstQueries.SelectedItem is not QueryItem q) return;
+            var idx = _currentQueries.IndexOf(q);
+            if (idx < 0 || idx >= _currentQueries.Count - 1) return;
+            _currentQueries.Move(idx, idx + 1);
+            LstQueries.SelectedItem = q;
+        }
+
+        private void LstQueries_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LstQueries.SelectedItem is QueryItem q)
+                LoadQueryIntoEditor(q);
+            else
+                ClearQueryEditor();
+        }
+
+        private void LoadQueryIntoEditor(QueryItem q)
+        {
+            _editingQuery = q;
+            _suppressQueryEditorSync = true;
+            TxtEditQueryName.Text = q.Name;
+            TxtEditQuerySql.Text  = q.Sql;
+            TxtEditQuerySql.IsEnabled = true;
+            QueryEditorPanel.Visibility = Visibility.Visible;
+            TxtQueryEditorLabel.Text = "EDITING QUERY";
+            _suppressQueryEditorSync = false;
+        }
+
+        private void ClearQueryEditor()
+        {
+            _editingQuery = null;
+            _suppressQueryEditorSync = true;
+            TxtEditQueryName.Text = string.Empty;
+            TxtEditQuerySql.Text  = string.Empty;
+            TxtEditQuerySql.IsEnabled = false;
+            QueryEditorPanel.Visibility = Visibility.Collapsed;
+            TxtQueryEditorLabel.Text = "SELECT A QUERY ABOVE TO EDIT";
+            _suppressQueryEditorSync = false;
+        }
+
+        // Live-sync editor → model (no explicit save needed for queries)
+        private void TxtEditQueryName_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressQueryEditorSync || _editingQuery == null) return;
+            _editingQuery.Name = TxtEditQueryName.Text;
+            // Refresh ListBox item display
+            var idx = LstQueries.SelectedIndex;
+            LstQueries.ItemsSource = null;
+            LstQueries.ItemsSource = _currentQueries;
+            LstQueries.SelectedIndex = idx;
+        }
+
+        private void TxtEditQuerySql_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressQueryEditorSync || _editingQuery == null) return;
+            _editingQuery.Sql = TxtEditQuerySql.Text;
+        }
+
+        // ────────────────────────────────────────────────────────────
         // Helpers
         // ────────────────────────────────────────────────────────────
 
         private void SetBusy(string? message)
         {
-            if (message != null)
-            {
-                TxtStatusBar.Text = message;
-                LoadingProgress.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                TxtStatusBar.Text = "Ready";
-                LoadingProgress.Visibility = Visibility.Collapsed;
-            }
+            TxtStatusBar.Text = message ?? "Ready";
+            LoadingProgress.Visibility = message != null ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void SetStatus(string message, bool isSuccess)
@@ -508,15 +648,14 @@ namespace DBAnalyzer
             TxtStatusBar.Text = message;
             TxtStatus.Text    = message;
             TxtStatus.Foreground = isSuccess
-                ? (System.Windows.Media.Brush)FindResource("SuccessColor")
-                : (System.Windows.Media.Brush)FindResource("ErrorColor");
+                ? (Brush)FindResource("SuccessColor")
+                : (Brush)FindResource("ErrorColor");
         }
     }
 
-    // Extension helper for JsonElement
-    internal static class JsonExtensions
+    internal static class JsonExt
     {
-        public static string GetStringProp(this JsonElement el, string name, string fallback = "")
+        public static string GetStr(this JsonElement el, string name, string fallback = "")
             => el.TryGetProperty(name, out var p) ? (p.GetString() ?? fallback) : fallback;
     }
 }

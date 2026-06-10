@@ -1,4 +1,4 @@
-using System;
+using System.Collections.Generic;
 
 namespace DBAnalyzer.Models
 {
@@ -10,7 +10,7 @@ namespace DBAnalyzer.Models
         public string Username { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
         public bool UseWindowsAuth { get; set; } = false;
-        public string SqlQuery { get; set; } = "SELECT TOP 100 * FROM ";
+        public List<QueryItem> Queries { get; set; } = new();
 
         public string BuildConnectionString()
         {
