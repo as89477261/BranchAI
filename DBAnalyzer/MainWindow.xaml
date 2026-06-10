@@ -73,12 +73,7 @@
                 <Grid Margin="16,12,16,12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="0.32*" MinHeight="120"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="0.2*"  MinHeight="80"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="0.48*" MinHeight="120"/>
+                        <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
                     <!-- ── ID Input Card ── -->
@@ -227,236 +222,243 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ── Fetch / Context Header ── -->
-                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                    <!-- ── 2-Column Body ── -->
+                    <Grid Grid.Row="1">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*" MinWidth="320"/>
+                            <ColumnDefinition Width="5"/>
+                            <ColumnDefinition Width="*" MinWidth="320"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Style="{StaticResource SectionHeader}"
-                                       Text="Aggregated Data Context" Margin="0,0,0,2"/>
-                            <TextBlock x:Name="TxtContextSummary"
-                                       Foreground="{StaticResource TextSecondary}" FontSize="11"
-                                       Text="No data loaded yet. Configure sources in the Data Sources tab, then click Fetch."/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="BtnPreviewSql"
-                                    Content="🔍 Preview SQL"
-                                    Style="{StaticResource SecondaryButton}"
-                                    Click="BtnPreviewSql_Click"
-                                    Padding="12,10" Margin="0,0,8,0"
-                                    ToolTip="แสดง SQL จริงที่จะรัน (หลังแทนค่า {ID} แล้ว)"/>
-                            <Button x:Name="BtnFetchData"
-                                    Content="⬇  Fetch Data from All Sources"
-                                    Style="{StaticResource PrimaryButton}"
-                                    Click="BtnFetchData_Click"
-                                    Padding="18,10" FontSize="14" Margin="0,0,8,0"/>
-                            <Button Content="Clear Context"
-                                    Style="{StaticResource SecondaryButton}"
-                                    Click="BtnClearContext_Click" Padding="12,10"/>
-                        </StackPanel>
-                    </Grid>
 
-                    <!-- ── Context Card List ── -->
-                    <Border Grid.Row="2"
-                            Background="{StaticResource InputBackground}"
-                            BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1" CornerRadius="4">
-                        <ScrollViewer x:Name="ContextScrollViewer"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      Padding="8,6">
-                            <StackPanel>
-                                <!-- Empty state -->
-                                <TextBlock x:Name="TxtEmptyContext"
-                                           Text="ยังไม่มีข้อมูล — กรอก ID และกด &quot;Fetch Data from All Sources&quot;"
-                                           Foreground="#555570" FontSize="13" FontStyle="Italic"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,20,0,0" Visibility="Visible"/>
+                        <!-- ══════════════ LEFT COLUMN ══════════════ -->
+                        <Grid Grid.Column="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="0.55*" MinHeight="120"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="0.3*"  MinHeight="80"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                                <!-- Data source cards -->
-                                <ItemsControl x:Name="ContextItemsPanel">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <!-- Outer card wrapper with colored border -->
-                                            <Border Margin="0,0,0,6"
-                                                    CornerRadius="5"
-                                                    BorderThickness="1"
-                                                    BorderBrush="{Binding CardBorderColor}">
+                            <!-- Fetch / Context Header -->
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Style="{StaticResource SectionHeader}"
+                                               Text="Aggregated Data Context" Margin="0,0,0,2"/>
+                                    <TextBlock x:Name="TxtContextSummary"
+                                               Foreground="{StaticResource TextSecondary}" FontSize="11"
+                                               Text="No data loaded yet. Configure sources in the Data Sources tab, then click Fetch."/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button x:Name="BtnPreviewSql"
+                                            Content="🔍 Preview SQL"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Click="BtnPreviewSql_Click"
+                                            Padding="10,8" Margin="0,0,6,0"
+                                            ToolTip="แสดง SQL จริงที่จะรัน (หลังแทนค่า {ID} แล้ว)"/>
+                                    <Button x:Name="BtnFetchData"
+                                            Content="⬇  Fetch Data"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Click="BtnFetchData_Click"
+                                            Padding="14,8" FontSize="13" Margin="0,0,6,0"/>
+                                    <Button Content="Clear"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Click="BtnClearContext_Click" Padding="10,8"/>
+                                </StackPanel>
+                            </Grid>
 
-                                                <StackPanel>
-                                                    <!-- ▸ Card Header (click to expand/collapse) -->
-                                                    <Button Style="{StaticResource CardHeaderButton}"
-                                                            Background="{Binding CardHeaderBackground}"
-                                                            Tag="{Binding}"
-                                                            Click="CardHeader_Click">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                            </Grid.ColumnDefinitions>
-
-                                                            <!-- Status icon -->
-                                                            <TextBlock Grid.Column="0"
-                                                                       Text="{Binding StatusIcon}"
-                                                                       FontSize="14"
-                                                                       VerticalAlignment="Center"
-                                                                       Margin="0,0,10,0"/>
-
-                                                            <!-- Header text -->
-                                                            <TextBlock Grid.Column="1"
-                                                                       Text="{Binding Header}"
-                                                                       Foreground="{StaticResource TextPrimary}"
-                                                                       FontSize="12" FontWeight="SemiBold"
-                                                                       VerticalAlignment="Center"
-                                                                       TextTrimming="CharacterEllipsis"/>
-
-                                                            <!-- Status badge -->
-                                                            <Border Grid.Column="2"
-                                                                    Background="#1E1E38"
-                                                                    CornerRadius="10"
-                                                                    Padding="8,2"
-                                                                    Margin="8,0"
-                                                                    VerticalAlignment="Center">
-                                                                <StackPanel Orientation="Horizontal">
-                                                                    <!-- Loading spinner bar -->
-                                                                    <ProgressBar
-                                                                        Width="60" Height="3"
-                                                                        IsIndeterminate="True"
-                                                                        Foreground="{StaticResource AccentColor}"
-                                                                        Background="Transparent"
-                                                                        Margin="0,0,6,0"
-                                                                        Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"/>
-                                                                    <TextBlock Text="{Binding StatusText}"
+                            <!-- Context Card List -->
+                            <Border Grid.Row="1"
+                                    Background="{StaticResource InputBackground}"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1" CornerRadius="4"
+                                    Margin="0,0,0,0">
+                                <ScrollViewer x:Name="ContextScrollViewer"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Padding="8,6">
+                                    <StackPanel>
+                                        <TextBlock x:Name="TxtEmptyContext"
+                                                   Text="ยังไม่มีข้อมูล — กรอก ID และกด &quot;Fetch Data&quot;"
+                                                   Foreground="#555570" FontSize="13" FontStyle="Italic"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,20,0,0" Visibility="Visible"/>
+                                        <ItemsControl x:Name="ContextItemsPanel">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,0,0,6"
+                                                            CornerRadius="5"
+                                                            BorderThickness="1"
+                                                            BorderBrush="{Binding CardBorderColor}">
+                                                        <StackPanel>
+                                                            <Button Style="{StaticResource CardHeaderButton}"
+                                                                    Background="{Binding CardHeaderBackground}"
+                                                                    Tag="{Binding}"
+                                                                    Click="CardHeader_Click">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Grid.Column="0"
+                                                                               Text="{Binding StatusIcon}"
+                                                                               FontSize="14"
+                                                                               VerticalAlignment="Center"
+                                                                               Margin="0,0,10,0"/>
+                                                                    <TextBlock Grid.Column="1"
+                                                                               Text="{Binding Header}"
+                                                                               Foreground="{StaticResource TextPrimary}"
+                                                                               FontSize="12" FontWeight="SemiBold"
+                                                                               VerticalAlignment="Center"
+                                                                               TextTrimming="CharacterEllipsis"/>
+                                                                    <Border Grid.Column="2"
+                                                                            Background="#1E1E38"
+                                                                            CornerRadius="10"
+                                                                            Padding="8,2"
+                                                                            Margin="8,0"
+                                                                            VerticalAlignment="Center">
+                                                                        <StackPanel Orientation="Horizontal">
+                                                                            <ProgressBar
+                                                                                Width="60" Height="3"
+                                                                                IsIndeterminate="True"
+                                                                                Foreground="{StaticResource AccentColor}"
+                                                                                Background="Transparent"
+                                                                                Margin="0,0,6,0"
+                                                                                Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"/>
+                                                                            <TextBlock Text="{Binding StatusText}"
+                                                                                       Foreground="{StaticResource TextSecondary}"
+                                                                                       FontSize="11"/>
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                    <TextBlock Grid.Column="3"
+                                                                               Text="{Binding ExpandIcon}"
                                                                                Foreground="{StaticResource TextSecondary}"
-                                                                               FontSize="11"/>
+                                                                               FontSize="11"
+                                                                               VerticalAlignment="Center"
+                                                                               Margin="4,0,0,0"/>
+                                                                </Grid>
+                                                            </Button>
+                                                            <Border Background="#141424"
+                                                                    Padding="10,8"
+                                                                    Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                                                                <StackPanel>
+                                                                    <TextBlock
+                                                                        Foreground="#FF7070"
+                                                                        FontSize="12" FontFamily="Consolas"
+                                                                        TextWrapping="Wrap"
+                                                                        Margin="0,0,0,6"
+                                                                        Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsed}}">
+                                                                        <Run Text="⚠  "/><Run Text="{Binding ErrorMessage}"/>
+                                                                    </TextBlock>
+                                                                    <ItemsControl ItemsSource="{Binding Rows}">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate>
+                                                                                <Border Background="#1D1D30"
+                                                                                        BorderBrush="#2A2A42"
+                                                                                        BorderThickness="1"
+                                                                                        CornerRadius="3"
+                                                                                        Padding="10,7"
+                                                                                        Margin="0,0,0,4">
+                                                                                    <ItemsControl ItemsSource="{Binding Fields}">
+                                                                                        <ItemsControl.ItemTemplate>
+                                                                                            <DataTemplate>
+                                                                                                <Grid Margin="0,1">
+                                                                                                    <Grid.ColumnDefinitions>
+                                                                                                        <ColumnDefinition Width="160" MinWidth="80"/>
+                                                                                                        <ColumnDefinition Width="Auto"/>
+                                                                                                        <ColumnDefinition Width="*"/>
+                                                                                                    </Grid.ColumnDefinitions>
+                                                                                                    <TextBlock Grid.Column="0"
+                                                                                                               Text="{Binding Key}"
+                                                                                                               Foreground="{StaticResource TextSecondary}"
+                                                                                                               FontSize="11"
+                                                                                                               FontFamily="Consolas"/>
+                                                                                                    <TextBlock Grid.Column="1"
+                                                                                                               Text=" :  "
+                                                                                                               Foreground="#333355"
+                                                                                                               FontSize="11"/>
+                                                                                                    <TextBlock Grid.Column="2"
+                                                                                                               Text="{Binding Value}"
+                                                                                                               Foreground="{StaticResource TextPrimary}"
+                                                                                                               FontSize="11"
+                                                                                                               FontFamily="Consolas"
+                                                                                                               TextWrapping="Wrap"/>
+                                                                                                </Grid>
+                                                                                            </DataTemplate>
+                                                                                        </ItemsControl.ItemTemplate>
+                                                                                    </ItemsControl>
+                                                                                </Border>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
                                                                 </StackPanel>
                                                             </Border>
-
-                                                            <!-- Expand arrow -->
-                                                            <TextBlock Grid.Column="3"
-                                                                       Text="{Binding ExpandIcon}"
-                                                                       Foreground="{StaticResource TextSecondary}"
-                                                                       FontSize="11"
-                                                                       VerticalAlignment="Center"
-                                                                       Margin="4,0,0,0"/>
-                                                        </Grid>
-                                                    </Button>
-
-                                                    <!-- ▸ Detail panel (visible when expanded) -->
-                                                    <Border x:Name="DetailPanel"
-                                                            Background="#141424"
-                                                            Padding="10,8"
-                                                            Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
-                                                        <StackPanel>
-                                                            <!-- Error message -->
-                                                            <TextBlock
-                                                                Foreground="#FF7070"
-                                                                FontSize="12" FontFamily="Consolas"
-                                                                TextWrapping="Wrap"
-                                                                Margin="0,0,0,6"
-                                                                Visibility="{Binding ErrorMessage, Converter={StaticResource NullToCollapsed}}">
-                                                                <Run Text="⚠  "/><Run Text="{Binding ErrorMessage}"/>
-                                                            </TextBlock>
-
-                                                            <!-- Data rows -->
-                                                            <ItemsControl ItemsSource="{Binding Rows}">
-                                                                <ItemsControl.ItemTemplate>
-                                                                    <DataTemplate>
-                                                                        <!-- Row card -->
-                                                                        <Border Background="#1D1D30"
-                                                                                BorderBrush="#2A2A42"
-                                                                                BorderThickness="1"
-                                                                                CornerRadius="3"
-                                                                                Padding="10,7"
-                                                                                Margin="0,0,0,4">
-                                                                            <ItemsControl ItemsSource="{Binding Fields}">
-                                                                                <ItemsControl.ItemTemplate>
-                                                                                    <DataTemplate>
-                                                                                        <Grid Margin="0,1">
-                                                                                            <Grid.ColumnDefinitions>
-                                                                                                <ColumnDefinition Width="160" MinWidth="80"/>
-                                                                                                <ColumnDefinition Width="Auto"/>
-                                                                                                <ColumnDefinition Width="*"/>
-                                                                                            </Grid.ColumnDefinitions>
-                                                                                            <TextBlock Grid.Column="0"
-                                                                                                       Text="{Binding Key}"
-                                                                                                       Foreground="{StaticResource TextSecondary}"
-                                                                                                       FontSize="11"
-                                                                                                       FontFamily="Consolas"/>
-                                                                                            <TextBlock Grid.Column="1"
-                                                                                                       Text=" :  "
-                                                                                                       Foreground="#333355"
-                                                                                                       FontSize="11"/>
-                                                                                            <TextBlock Grid.Column="2"
-                                                                                                       Text="{Binding Value}"
-                                                                                                       Foreground="{StaticResource TextPrimary}"
-                                                                                                       FontSize="11"
-                                                                                                       FontFamily="Consolas"
-                                                                                                       TextWrapping="Wrap"/>
-                                                                                        </Grid>
-                                                                                    </DataTemplate>
-                                                                                </ItemsControl.ItemTemplate>
-                                                                            </ItemsControl>
-                                                                        </Border>
-                                                                    </DataTemplate>
-                                                                </ItemsControl.ItemTemplate>
-                                                            </ItemsControl>
                                                         </StackPanel>
                                                     </Border>
-                                                </StackPanel>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+
+                            <!-- Divider -->
+                            <Border Grid.Row="2" Height="1"
+                                    Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                            <!-- Analysis Prompt -->
+                            <DockPanel Grid.Row="3">
+                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeader}"
+                                           Text="Analysis Prompt"/>
+                                <TextBox x:Name="TxtPrompt"
+                                         Style="{StaticResource DarkTextBox}"
+                                         AcceptsReturn="True" TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto" FontSize="13"
+                                         Text="Analyze the data above and provide insights."/>
+                            </DockPanel>
+
+                            <!-- Action Buttons -->
+                            <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button x:Name="BtnSendToLlm"
+                                        Content="▶  Send to LLM"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Click="BtnSendToLlm_Click"
+                                        Padding="18,8" FontSize="14" Margin="0,0,8,0"/>
+                                <Button Content="Clear Response"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Click="BtnClearResponse_Click" Margin="0,0,8,0"/>
+                                <Button x:Name="BtnExportPdf"
+                                        Content="⬆  Export PDF"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Click="BtnExportPdf_Click" IsEnabled="False"/>
                             </StackPanel>
-                        </ScrollViewer>
-                    </Border>
+                        </Grid>
 
-                    <!-- Divider -->
-                    <Border Grid.Row="3" Height="1"
-                            Background="{StaticResource BorderBrush}" Margin="0,6"/>
+                        <!-- GridSplitter -->
+                        <GridSplitter Grid.Column="1"
+                                      Width="5"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      Background="{StaticResource BorderBrush}"
+                                      Cursor="SizeWE"/>
 
-                    <!-- ── Prompt ── -->
-                    <DockPanel Grid.Row="4">
-                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeader}"
-                                   Text="Analysis Prompt"/>
-                        <TextBox x:Name="TxtPrompt"
-                                 Style="{StaticResource DarkTextBox}"
-                                 AcceptsReturn="True" TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto" FontSize="13"
-                                 Text="Analyze the data above and provide insights."/>
-                    </DockPanel>
-
-                    <!-- ── Action Buttons ── -->
-                    <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,6">
-                        <Button x:Name="BtnSendToLlm"
-                                Content="▶  Send to LLM"
-                                Style="{StaticResource PrimaryButton}"
-                                Click="BtnSendToLlm_Click"
-                                Padding="18,8" FontSize="14" Margin="0,0,8,0"/>
-                        <Button Content="Clear Response"
-                                Style="{StaticResource SecondaryButton}"
-                                Click="BtnClearResponse_Click" Margin="0,0,8,0"/>
-                        <Button x:Name="BtnExportPdf"
-                                Content="⬆  Export PDF"
-                                Style="{StaticResource SecondaryButton}"
-                                Click="BtnExportPdf_Click" IsEnabled="False"/>
-                    </StackPanel>
-
-                    <!-- ── LLM Response ── -->
-                    <DockPanel Grid.Row="6">
-                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeader}"
-                                   Text="LLM Response"/>
-                        <TextBox x:Name="TxtLlmResponse"
-                                 Style="{StaticResource DarkTextBox}"
-                                 IsReadOnly="True" AcceptsReturn="True"
-                                 TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
-                                 FontSize="13" Background="#161626" Foreground="#E8E8FF"/>
-                    </DockPanel>
+                        <!-- ══════════════ RIGHT COLUMN ══════════════ -->
+                        <DockPanel Grid.Column="2" Margin="8,0,0,0">
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeader}"
+                                       Text="LLM Response"/>
+                            <TextBox x:Name="TxtLlmResponse"
+                                     Style="{StaticResource DarkTextBox}"
+                                     IsReadOnly="True" AcceptsReturn="True"
+                                     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                     FontSize="13" Background="#161626" Foreground="#E8E8FF"/>
+                        </DockPanel>
+                    </Grid>
                 </Grid>
             </TabItem>
 
