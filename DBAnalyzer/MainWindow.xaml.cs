@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -197,6 +198,17 @@ namespace DBAnalyzer
             SqlPreviewBorder.Visibility = Visibility.Collapsed;
         }
 
+        // Card header click → toggle IsExpanded
+        private void CardHeader_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is ContextItem item)
+            {
+                item.IsExpanded = !item.IsExpanded;
+                // Scroll the card into view slightly
+                ContextScrollViewer.UpdateLayout();
+            }
+        }
+
         private async void BtnFetchData_Click(object sender, RoutedEventArgs e)
         {
             if (_connections.Count == 0)
@@ -206,27 +218,44 @@ namespace DBAnalyzer
                 return;
             }
 
-            var allQueries = _connections.SelectMany(c =>
-                c.Queries.Select(q => (conn: c, query: q))).ToList();
+            var allQueries = _connections
+                .SelectMany(c => c.Queries.Select(q => (conn: c, query: q)))
+                .ToList();
 
             if (allQueries.Count == 0)
             {
-                MessageBox.Show("ยังไม่มี SQL Query\nไปที่ Tab \"Data Sources\" เพื่อเพิ่ม Query ให้แต่ละ connection",
+                MessageBox.Show("ยังไม่มี SQL Query\nไปที่ Tab \"Data Sources\" เพื่อเพิ่ม Query",
                     "No Queries", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             var idValue = TxtCustomerId.Text.Trim();
 
-            BtnFetchData.IsEnabled = false;
+            BtnFetchData.IsEnabled  = false;
             BtnPreviewSql.IsEnabled = false;
-            SetBusy($"กำลังดึงข้อมูล {allQueries.Count} query จาก {_connections.Count} source...");
-            _contextItems.Clear();
             TxtEmptyContext.Visibility = Visibility.Collapsed;
 
+            // ── Pre-populate Loading cards (real-time feedback) ──────────────
+            _contextItems.Clear();
+            var cardMap = new Dictionary<(string, string), ContextItem>();
+            foreach (var (conn, query) in allQueries)
+            {
+                var card = new ContextItem
+                {
+                    Header = $"{conn.Name}  /  {query.Name}",
+                    Status = ContextStatus.Loading
+                };
+                _contextItems.Add(card);
+                cardMap[(conn.Name, query.Name)] = card;
+            }
+
+            SetBusy($"กำลังดึงข้อมูล {allQueries.Count} query...");
+
+            // ── Execute sequentially, updating each card as it completes ─────
             int ok = 0, fail = 0;
             foreach (var (conn, query) in allQueries)
             {
+                var card        = cardMap[(conn.Name, query.Name)];
                 var resolvedSql = ResolveQuery(query.Sql, idValue);
                 SetBusy($"กำลังรัน: [{conn.Name}] {query.Name}");
 
@@ -234,27 +263,24 @@ namespace DBAnalyzer
 
                 if (!string.IsNullOrEmpty(error))
                 {
-                    // Show which resolved SQL caused the error
-                    _contextItems.Add(new ContextItem
-                    {
-                        Header  = $"❌  {conn.Name} — {query.Name}",
-                        RawText = $"[{conn.Name} / {query.Name}] Error: {error}\nSQL: {resolvedSql}\n"
-                    });
+                    card.Status       = ContextStatus.Failed;
+                    card.ErrorMessage = error;
+                    card.RawText      = $"[{conn.Name} / {query.Name}] Error: {error}\nSQL: {resolvedSql}\n";
                     fail++;
                 }
                 else if (data == null || data.Rows.Count == 0)
                 {
-                    _contextItems.Add(new ContextItem
-                    {
-                        Header  = $"⚪  {conn.Name} — {query.Name}  (0 rows)",
-                        RawText = $"[{conn.Name} / {query.Name}] No rows returned.\nSQL: {resolvedSql}\n"
-                    });
+                    card.Status  = ContextStatus.Empty;
+                    card.RawText = $"[{conn.Name} / {query.Name}] No rows returned.\n";
                     ok++;
                 }
                 else
                 {
-                    var item = _databaseService.DataTableToContextItem(data, $"{conn.Name} / {query.Name}");
-                    _contextItems.Add(item);
+                    var filled = _databaseService.DataTableToContextItem(
+                        data, $"{conn.Name} / {query.Name}");
+                    card.Status  = ContextStatus.Success;
+                    card.Rows    = filled.Rows;
+                    card.RawText = filled.RawText;
                     ok++;
                 }
             }
@@ -263,11 +289,8 @@ namespace DBAnalyzer
             BtnFetchData.IsEnabled  = true;
             BtnPreviewSql.IsEnabled = true;
 
-            if (_contextItems.Count == 0)
-                TxtEmptyContext.Visibility = Visibility.Visible;
-
-            var msg = $"โหลดสำเร็จ {ok} query";
-            if (fail > 0) msg += $"  |  ล้มเหลว {fail} query";
+            var msg = $"✔  {ok} query สำเร็จ";
+            if (fail > 0) msg += $"  |  ❌ {fail} query ล้มเหลว";
             if (!string.IsNullOrEmpty(idValue)) msg += $"  |  ID={idValue}";
             SetStatus(msg, fail == 0);
         }
@@ -323,14 +346,18 @@ namespace DBAnalyzer
         {
             if (_contextItems.Count == 0)
             {
-                TxtContextSummary.Text = "ยังไม่มีข้อมูล — กรอก ID และกด Fetch";
-                TxtEmptyContext.Visibility = Visibility.Visible;
+                TxtContextSummary.Text     = "ยังไม่มีข้อมูล — กรอก ID และกด Fetch";
+                TxtEmptyContext.Visibility  = Visibility.Visible;
             }
             else
             {
-                int total = _contextItems.Sum(i => i.Rows.Count);
-                TxtContextSummary.Text = $"{_contextItems.Count} query loaded  ·  {total} total rows";
-                TxtEmptyContext.Visibility = Visibility.Collapsed;
+                int success = _contextItems.Count(i => i.Status == ContextStatus.Success);
+                int failed  = _contextItems.Count(i => i.Status == ContextStatus.Failed);
+                int total   = _contextItems.Sum(i => i.Rows.Count);
+                TxtContextSummary.Text     = $"{_contextItems.Count} source(s)  ·  ✅ {success} สำเร็จ" +
+                                             (failed > 0 ? $"  ·  ❌ {failed} ล้มเหลว" : "") +
+                                             $"  ·  {total} rows";
+                TxtEmptyContext.Visibility  = Visibility.Collapsed;
             }
         }
 
