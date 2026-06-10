@@ -21,6 +21,7 @@ namespace DBAnalyzer
     {
         private readonly DatabaseService _databaseService = new DatabaseService();
         private readonly LlmService _llmService = new LlmService();
+        private readonly DbdService _dbdService = new DbdService();
         private readonly ObservableCollection<DbConnectionInfo> _connections = new ObservableCollection<DbConnectionInfo>();
         private readonly ObservableCollection<ContextItem> _contextItems = new ObservableCollection<ContextItem>();
         private const string SettingsFile = "appsettings.json";
@@ -155,6 +156,46 @@ namespace DBAnalyzer
         // Analysis Tab — Fetch Data
         // ────────────────────────────────────────────────────────────
 
+        // Substitute {ID} and any other {PARAM} patterns — case-insensitive
+        // Resolve {ID} placeholder — case-insensitive, supports common variants
+        private string ResolveQuery(string sql, string idValue)
+        {
+            if (string.IsNullOrEmpty(idValue)) return sql;
+            // Use regex-style replace to catch {id}, {ID}, {Id} in one pass
+            return System.Text.RegularExpressions.Regex.Replace(
+                sql, @"\{ID\}", idValue,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        private string BuildSqlPreview()
+        {
+            var idValue = TxtCustomerId.Text.Trim();
+            var allQueries = _connections.SelectMany(c =>
+                c.Queries.Select(q => (conn: c, query: q))).ToList();
+
+            if (allQueries.Count == 0) return "(ยังไม่มี query ใน Data Sources)";
+
+            var sb = new StringBuilder();
+            foreach (var (conn, query) in allQueries)
+            {
+                sb.AppendLine($"-- [{conn.Name}] {query.Name}");
+                sb.AppendLine(ResolveQuery(query.Sql, idValue));
+                sb.AppendLine();
+            }
+            return sb.ToString().TrimEnd();
+        }
+
+        private void BtnPreviewSql_Click(object sender, RoutedEventArgs e)
+        {
+            TxtSqlPreview.Text       = BuildSqlPreview();
+            SqlPreviewBorder.Visibility = Visibility.Visible;
+        }
+
+        private void BtnClosePreview_Click(object sender, RoutedEventArgs e)
+        {
+            SqlPreviewBorder.Visibility = Visibility.Collapsed;
+        }
+
         private async void BtnFetchData_Click(object sender, RoutedEventArgs e)
         {
             if (_connections.Count == 0)
@@ -177,36 +218,36 @@ namespace DBAnalyzer
             var idValue = TxtCustomerId.Text.Trim();
 
             BtnFetchData.IsEnabled = false;
+            BtnPreviewSql.IsEnabled = false;
             SetBusy($"กำลังดึงข้อมูล {allQueries.Count} query จาก {_connections.Count} source...");
             _contextItems.Clear();
             TxtEmptyContext.Visibility = Visibility.Collapsed;
 
-            // Run queries sequentially in declared order
             int ok = 0, fail = 0;
             foreach (var (conn, query) in allQueries)
             {
-                SetBusy($"กำลังรัน: [{conn.Name}] {query.Name}...");
-                var sql = query.Sql.Replace("{ID}", idValue);
-                var (data, error) = await _databaseService.ExecuteQueryAsync(conn, sql);
+                var resolvedSql = ResolveQuery(query.Sql, idValue);
+                SetBusy($"กำลังรัน: [{conn.Name}] {query.Name}");
+
+                var (data, error) = await _databaseService.ExecuteQueryAsync(conn, resolvedSql);
 
                 if (!string.IsNullOrEmpty(error))
                 {
-                    var errItem = new ContextItem
+                    // Show which resolved SQL caused the error
+                    _contextItems.Add(new ContextItem
                     {
                         Header  = $"❌  {conn.Name} — {query.Name}",
-                        RawText = $"[{conn.Name} / {query.Name}] Error: {error}\n"
-                    };
-                    _contextItems.Add(errItem);
+                        RawText = $"[{conn.Name} / {query.Name}] Error: {error}\nSQL: {resolvedSql}\n"
+                    });
                     fail++;
                 }
                 else if (data == null || data.Rows.Count == 0)
                 {
-                    var emptyItem = new ContextItem
+                    _contextItems.Add(new ContextItem
                     {
-                        Header  = $"{conn.Name} — {query.Name}  (0 rows)",
-                        RawText = $"[{conn.Name} / {query.Name}] No rows returned.\n"
-                    };
-                    _contextItems.Add(emptyItem);
+                        Header  = $"⚪  {conn.Name} — {query.Name}  (0 rows)",
+                        RawText = $"[{conn.Name} / {query.Name}] No rows returned.\nSQL: {resolvedSql}\n"
+                    });
                     ok++;
                 }
                 else
@@ -218,15 +259,63 @@ namespace DBAnalyzer
             }
 
             SetBusy(null);
-            BtnFetchData.IsEnabled = true;
+            BtnFetchData.IsEnabled  = true;
+            BtnPreviewSql.IsEnabled = true;
 
             if (_contextItems.Count == 0)
                 TxtEmptyContext.Visibility = Visibility.Visible;
 
             var msg = $"โหลดสำเร็จ {ok} query";
             if (fail > 0) msg += $"  |  ล้มเหลว {fail} query";
-            if (!string.IsNullOrEmpty(idValue)) msg += $"  |  ID: {idValue}";
+            if (!string.IsNullOrEmpty(idValue)) msg += $"  |  ID={idValue}";
             SetStatus(msg, fail == 0);
+        }
+
+        private async void BtnFetchDbd_Click(object sender, RoutedEventArgs e)
+        {
+            var id = TxtCustomerId.Text.Trim();
+            if (id.Length != 13)
+            {
+                MessageBox.Show("กรุณากรอกเลข 13 หลักให้ครบก่อน", "ข้อมูลไม่ครบ",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            BtnFetchDbd.IsEnabled = false;
+            SetBusy($"กำลังดึงข้อมูลนิติบุคคลจาก DBD Open Data... ({id})");
+
+            var (item, error) = await _dbdService.FetchJuristicAsync(id);
+
+            SetBusy(null);
+            BtnFetchDbd.IsEnabled = true;
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                SetStatus($"DBD fetch failed: {error}", false);
+                MessageBox.Show(
+                    $"ไม่สามารถดึงข้อมูลจาก DBD ได้:\n{error}\n\n" +
+                    "หมายเหตุ: opendata.dbd.go.th อาจ block IP นอกไทย หรือ server ไม่พร้อม",
+                    "DBD Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (item == null)
+            {
+                SetStatus($"ไม่พบข้อมูลนิติบุคคลเลข {id} ใน DBD Open Data", false);
+                MessageBox.Show(
+                    $"ไม่พบเลข {id} ใน DBD Open Data\n\n" +
+                    "เป็นไปได้ว่า:\n" +
+                    "• เป็นเลขบัตรประชาชน (ไม่ใช่เลขนิติบุคคล)\n" +
+                    "• ยังไม่อยู่ใน dataset สาธารณะ\n" +
+                    "• ลองตรวจสอบที่ datawarehouse.dbd.go.th โดยตรง",
+                    "ไม่พบข้อมูล", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // Add DBD result to top of context
+            _contextItems.Insert(0, item);
+            TxtEmptyContext.Visibility = Visibility.Collapsed;
+            SetStatus($"✔ โหลดข้อมูล DBD นิติบุคคล {id} สำเร็จ", true);
         }
 
         private void UpdateContextSummary()

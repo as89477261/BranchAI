@@ -87,44 +87,88 @@
                             BorderBrush="{StaticResource AccentColor}"
                             BorderThickness="1" CornerRadius="6"
                             Padding="16,12" Margin="0,0,0,10">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="220"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="220"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="รหัสบัตรประชาชน / Customer ID"
-                                           Foreground="{StaticResource TextPrimary}"
-                                           FontWeight="SemiBold" FontSize="13"/>
-                                <TextBlock Text="13 หลัก — ใช้ {ID} ใน SQL เพื่อแทนค่านี้"
-                                           Foreground="{StaticResource TextSecondary}"
-                                           FontSize="11" Margin="0,2,0,0"/>
-                            </StackPanel>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="เลข 13 หลัก (บุคคล / นิติบุคคล)"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               FontWeight="SemiBold" FontSize="13"/>
+                                    <TextBlock Text="ใช้ {ID} ใน SQL เพื่อแทนค่านี้อัตโนมัติ"
+                                               Foreground="{StaticResource TextSecondary}"
+                                               FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
 
-                            <TextBox Grid.Column="1"
-                                     x:Name="TxtCustomerId"
-                                     Style="{StaticResource DarkTextBox}"
-                                     MaxLength="13"
-                                     FontSize="20"
-                                     FontFamily="Consolas"
-                                     FontWeight="Bold"
-                                     Foreground="#A0E0FF"
-                                     Background="#0D0D22"
-                                     TextAlignment="Center"
-                                     VerticalAlignment="Center"
-                                     TextChanged="TxtCustomerId_TextChanged"
-                                     ToolTip="กรอกเลขบัตรประชาชน 13 หลัก"/>
+                                <TextBox Grid.Column="1"
+                                         x:Name="TxtCustomerId"
+                                         Style="{StaticResource DarkTextBox}"
+                                         MaxLength="13"
+                                         FontSize="20"
+                                         FontFamily="Consolas"
+                                         FontWeight="Bold"
+                                         Foreground="#A0E0FF"
+                                         Background="#0D0D22"
+                                         TextAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         TextChanged="TxtCustomerId_TextChanged"/>
 
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="16,0,0,0">
-                                <TextBlock x:Name="TxtIdValidation"
-                                           FontSize="12" Margin="0,0,0,4"/>
-                                <TextBlock Text="ตัวอย่าง SQL:  SELECT * FROM Customer WHERE NationalId = '{ID}'"
-                                           Foreground="#555575"
-                                           FontSize="11" FontFamily="Consolas"/>
-                            </StackPanel>
-                        </Grid>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="14,0,0,0">
+                                    <TextBlock x:Name="TxtIdValidation" FontSize="12" Margin="0,0,0,3"/>
+                                    <TextBlock Text="ตัวอย่าง:  WHERE CustId = '{ID}'"
+                                               Foreground="#555575" FontSize="10" FontFamily="Consolas"/>
+                                </StackPanel>
+
+                                <!-- DBD Fetch button -->
+                                <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="12,0,0,0">
+                                    <Button x:Name="BtnFetchDbd"
+                                            Content="🏢  ดึงข้อมูล DBD"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Click="BtnFetchDbd_Click"
+                                            Padding="12,7" FontSize="12"
+                                            ToolTip="ดึงข้อมูลนิติบุคคลจาก DBD Open Data (opendata.dbd.go.th)"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- SQL Preview Panel (collapsed by default) -->
+                            <Border x:Name="SqlPreviewBorder"
+                                    Visibility="Collapsed"
+                                    Background="#0D0D1E"
+                                    BorderBrush="#333355"
+                                    BorderThickness="1" CornerRadius="4"
+                                    Margin="0,10,0,0" Padding="10,8">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <TextBlock Text="🔍 Preview SQL หลังแทนค่า {ID}"
+                                                   Foreground="{StaticResource TextSecondary}"
+                                                   FontSize="11" FontWeight="SemiBold"/>
+                                        <Button HorizontalAlignment="Right"
+                                                Content="✕" Style="{StaticResource SecondaryButton}"
+                                                Click="BtnClosePreview_Click"
+                                                Padding="6,2" FontSize="11"/>
+                                    </Grid>
+                                    <ScrollViewer MaxHeight="160"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Auto">
+                                        <TextBox x:Name="TxtSqlPreview"
+                                                 Style="{StaticResource DarkTextBox}"
+                                                 IsReadOnly="True"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="NoWrap"
+                                                 FontFamily="Consolas"
+                                                 FontSize="11"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Foreground="#88DDAA"/>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
                     </Border>
 
                     <!-- ── Fetch / Context Header ── -->
@@ -141,6 +185,12 @@
                                        Text="No data loaded yet. Configure sources in the Data Sources tab, then click Fetch."/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="BtnPreviewSql"
+                                    Content="🔍 Preview SQL"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="BtnPreviewSql_Click"
+                                    Padding="12,10" Margin="0,0,8,0"
+                                    ToolTip="แสดง SQL จริงที่จะรัน (หลังแทนค่า {ID} แล้ว)"/>
                             <Button x:Name="BtnFetchData"
                                     Content="⬇  Fetch Data from All Sources"
                                     Style="{StaticResource PrimaryButton}"
