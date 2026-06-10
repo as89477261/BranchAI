@@ -124,16 +124,72 @@
                                                Foreground="#555575" FontSize="10" FontFamily="Consolas"/>
                                 </StackPanel>
 
-                                <!-- DBD Fetch button -->
-                                <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="12,0,0,0">
+                                <!-- DBD buttons -->
+                                <StackPanel Grid.Column="3" VerticalAlignment="Center"
+                                            Orientation="Horizontal" Margin="12,0,0,0">
                                     <Button x:Name="BtnFetchDbd"
-                                            Content="🏢  ดึงข้อมูล DBD"
+                                            Content="🏢 DBD Open Data"
                                             Style="{StaticResource SecondaryButton}"
                                             Click="BtnFetchDbd_Click"
-                                            Padding="12,7" FontSize="12"
-                                            ToolTip="ดึงข้อมูลนิติบุคคลจาก DBD Open Data (opendata.dbd.go.th)"/>
+                                            Padding="10,7" FontSize="12" Margin="0,0,6,0"
+                                            ToolTip="ดึงข้อมูลทะเบียนนิติบุคคลจาก opendata.dbd.go.th (ฟรี)"/>
+                                    <Button x:Name="BtnScrapeDatawarehouse"
+                                            Content="📊 DataWarehouse"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Click="BtnScrapeDatawarehouse_Click"
+                                            Padding="10,7" FontSize="12"
+                                            ToolTip="Scrape ข้อมูลนิติบุคคล + งบการเงินจาก datawarehouse.dbd.go.th"/>
                                 </StackPanel>
                             </Grid>
+
+                            <!-- Scraper Log Panel -->
+                            <Border x:Name="ScraperLogBorder"
+                                    Visibility="Collapsed"
+                                    Background="#0A0A1A"
+                                    BorderBrush="#2A2A50"
+                                    BorderThickness="1" CornerRadius="4"
+                                    Margin="0,10,0,0" Padding="10,8">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0"
+                                                   Text="📋 DBD Scraper — Status Log"
+                                                   Foreground="{StaticResource TextSecondary}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1"
+                                                Content="Copy Log"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Click="BtnCopyLog_Click"
+                                                Padding="8,2" FontSize="10"
+                                                Margin="0,0,4,0"/>
+                                        <Button Grid.Column="2"
+                                                Content="✕"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Click="BtnCloseLog_Click"
+                                                Padding="6,2" FontSize="11"/>
+                                    </Grid>
+                                    <ScrollViewer x:Name="LogScrollViewer"
+                                                  MaxHeight="180"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Auto">
+                                        <TextBox x:Name="TxtScraperLog"
+                                                 Style="{StaticResource DarkTextBox}"
+                                                 IsReadOnly="True"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="NoWrap"
+                                                 FontFamily="Consolas"
+                                                 FontSize="11"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Foreground="#AADDAA"/>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
 
                             <!-- SQL Preview Panel (collapsed by default) -->
                             <Border x:Name="SqlPreviewBorder"

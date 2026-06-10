@@ -22,6 +22,7 @@ namespace DBAnalyzer
         private readonly DatabaseService _databaseService = new DatabaseService();
         private readonly LlmService _llmService = new LlmService();
         private readonly DbdService _dbdService = new DbdService();
+        private readonly DbdScraperService _scraperService = new DbdScraperService();
         private readonly ObservableCollection<DbConnectionInfo> _connections = new ObservableCollection<DbConnectionInfo>();
         private readonly ObservableCollection<ContextItem> _contextItems = new ObservableCollection<ContextItem>();
         private const string SettingsFile = "appsettings.json";
@@ -337,6 +338,81 @@ namespace DBAnalyzer
         {
             _contextItems.Clear();
             SetStatus("Context cleared.", true);
+        }
+
+        // ── Scraper Log helpers ────────────────────────────────────────────────
+
+        private void AppendLog(string line)
+        {
+            // Must run on UI thread; caller may be on background thread
+            Dispatcher.Invoke(() =>
+            {
+                ScraperLogBorder.Visibility = Visibility.Visible;
+                TxtScraperLog.Text += line + "\n";
+                LogScrollViewer.ScrollToBottom();
+            });
+        }
+
+        private void ClearLog()
+        {
+            TxtScraperLog.Text = string.Empty;
+            ScraperLogBorder.Visibility = Visibility.Visible;
+        }
+
+        private void BtnCloseLog_Click(object sender, RoutedEventArgs e)
+            => ScraperLogBorder.Visibility = Visibility.Collapsed;
+
+        private void BtnCopyLog_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrWhiteSpace(TxtScraperLog.Text))
+                Clipboard.SetText(TxtScraperLog.Text);
+        }
+
+        // ── DBD DataWarehouse Scraper ──────────────────────────────────────────
+
+        private async void BtnScrapeDatawarehouse_Click(object sender, RoutedEventArgs e)
+        {
+            var id = TxtCustomerId.Text.Trim();
+            if (id.Length != 13)
+            {
+                MessageBox.Show("กรุณากรอกเลข 13 หลักให้ครบก่อน", "ข้อมูลไม่ครบ",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            BtnScrapeDatawarehouse.IsEnabled = false;
+            ClearLog();
+            SetBusy("กำลัง scrape DBD DataWarehouse...");
+
+            // Run profile scrape
+            var (profileItem, profileLog) = await _scraperService.ScrapeAsync(
+                id, line => AppendLog(line));
+
+            // Run financial scrape regardless (separate endpoint)
+            AppendLog("");
+            AppendLog("────────────────────────────────");
+            var (finItem, finLog) = await _scraperService.ScrapeFinancialAsync(
+                id, line => AppendLog(line));
+
+            SetBusy(null);
+            BtnScrapeDatawarehouse.IsEnabled = true;
+
+            int added = 0;
+            if (profileItem != null) { _contextItems.Insert(0, profileItem); added++; }
+            if (finItem    != null) { _contextItems.Insert(profileItem != null ? 1 : 0, finItem); added++; }
+
+            if (added > 0)
+            {
+                TxtEmptyContext.Visibility = Visibility.Collapsed;
+                SetStatus($"✔ Scrape DBD DataWarehouse สำเร็จ ({added} block)", true);
+                AppendLog($"\n✅ เพิ่ม {added} block ลงใน Context แล้ว");
+            }
+            else
+            {
+                SetStatus("⚠ Scrape DBD DataWarehouse ล้มเหลว — ดู log สำหรับรายละเอียด", false);
+                AppendLog("\n⚠ ไม่มีข้อมูลถูกเพิ่มเข้า Context");
+                AppendLog("💡 อ่าน log ด้านบนเพื่อ debug หรือส่ง log ให้ developer");
+            }
         }
 
         // ────────────────────────────────────────────────────────────
