@@ -2,12 +2,17 @@ using System;
 using System.Collections.ObjectModel;
 using System.Data;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using DBAnalyzer.Models;
 using DBAnalyzer.Services;
+using Microsoft.Win32;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace DBAnalyzer
 {
@@ -16,6 +21,7 @@ namespace DBAnalyzer
         private readonly DatabaseService _databaseService = new DatabaseService();
         private readonly LlmService _llmService = new LlmService();
         private readonly ObservableCollection<DbConnectionInfo> _connections = new ObservableCollection<DbConnectionInfo>();
+        private readonly ObservableCollection<ContextItem> _contextItems = new ObservableCollection<ContextItem>();
         private DataTable? _lastQueryResult;
         private string _lastQueryConnectionName = string.Empty;
         private const string SettingsFile = "appsettings.json";
@@ -23,7 +29,9 @@ namespace DBAnalyzer
         public MainWindow()
         {
             InitializeComponent();
+            QuestPDF.Settings.License = LicenseType.Community;
             LstConnections.ItemsSource = _connections;
+            ContextItemsPanel.ItemsSource = _contextItems;
             LoadSettings();
         }
 
@@ -36,12 +44,10 @@ namespace DBAnalyzer
                     var json = File.ReadAllText(SettingsFile);
                     var doc = JsonDocument.Parse(json);
                     if (doc.RootElement.TryGetProperty("LlmApiUrl", out var urlProp))
-                    {
                         TxtApiUrl.Text = urlProp.GetString() ?? TxtApiUrl.Text;
-                    }
                 }
             }
-            catch { /* use defaults */ }
+            catch { }
         }
 
         private void SaveSettings()
@@ -49,8 +55,7 @@ namespace DBAnalyzer
             try
             {
                 var settings = new { LlmApiUrl = TxtApiUrl.Text.Trim() };
-                var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(SettingsFile, json);
+                File.WriteAllText(SettingsFile, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
             }
             catch (Exception ex)
             {
@@ -66,8 +71,7 @@ namespace DBAnalyzer
 
         private void BtnAddConnection_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new AddConnectionDialog();
-            dialog.Owner = this;
+            var dialog = new AddConnectionDialog { Owner = this };
             if (dialog.ShowDialog() == true && dialog.Result != null)
             {
                 _connections.Add(dialog.Result);
@@ -80,7 +84,7 @@ namespace DBAnalyzer
             if (LstConnections.SelectedItem is DbConnectionInfo conn)
             {
                 _connections.Remove(conn);
-                TxtSelectedConnection.Text = "None selected";
+                TxtSelectedConnection.Text = "— None selected —";
                 _lastQueryResult = null;
                 DgResults.ItemsSource = null;
                 TxtQueryResultInfo.Text = string.Empty;
@@ -94,29 +98,18 @@ namespace DBAnalyzer
                 MessageBox.Show("Please select a connection to test.", "No Selection", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
             SetBusy("Testing connection...");
             var (success, message) = await _databaseService.TestConnectionAsync(conn);
             SetBusy(null);
-
-            if (success)
-            {
-                MessageBox.Show(message, "Connection Test", MessageBoxButton.OK, MessageBoxImage.Information);
-                SetStatus(message, isSuccess: true);
-            }
-            else
-            {
-                MessageBox.Show(message, "Connection Test Failed", MessageBoxButton.OK, MessageBoxImage.Error);
-                SetStatus(message, isSuccess: false);
-            }
+            MessageBox.Show(message, success ? "Connection Test" : "Connection Test Failed",
+                MessageBoxButton.OK, success ? MessageBoxImage.Information : MessageBoxImage.Error);
+            SetStatus(message, isSuccess: success);
         }
 
         private void LstConnections_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (LstConnections.SelectedItem is DbConnectionInfo conn)
-            {
                 TxtSelectedConnection.Text = $"{conn.Name}  ({conn.Server} / {conn.Database})";
-            }
         }
 
         private async void BtnRunQuery_Click(object sender, RoutedEventArgs e)
@@ -126,7 +119,6 @@ namespace DBAnalyzer
                 MessageBox.Show("Please select a database connection.", "No Connection", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             var query = TxtQuery.Text.Trim();
             if (string.IsNullOrWhiteSpace(query))
             {
@@ -139,7 +131,6 @@ namespace DBAnalyzer
             _lastQueryResult = null;
 
             var (data, error) = await _databaseService.ExecuteQueryAsync(conn, query);
-
             SetBusy(null);
 
             if (!string.IsNullOrEmpty(error))
@@ -164,26 +155,26 @@ namespace DBAnalyzer
         {
             if (_lastQueryResult == null || _lastQueryResult.Rows.Count == 0)
             {
-                MessageBox.Show("No query results to add to context. Run a query first.", "No Data", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("No query results to add. Run a query first.", "No Data", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-
-            var text = _databaseService.DataTableToText(_lastQueryResult, _lastQueryConnectionName);
-            var existing = TxtAggregatedData.Text;
-
-            if (string.IsNullOrWhiteSpace(existing))
-                TxtAggregatedData.Text = text;
-            else
-                TxtAggregatedData.Text = existing + "\n" + text;
-
-            TxtAggregatedData.ScrollToEnd();
-            SetStatus("Results added to context.", isSuccess: true);
+            var item = _databaseService.DataTableToContextItem(_lastQueryResult, _lastQueryConnectionName);
+            _contextItems.Add(item);
+            SetStatus($"Added \"{_lastQueryConnectionName}\" to context  ({_contextItems.Count} block(s) total)", isSuccess: true);
         }
 
         private void BtnClearContext_Click(object sender, RoutedEventArgs e)
         {
-            TxtAggregatedData.Text = string.Empty;
+            _contextItems.Clear();
             SetStatus("Context cleared.", isSuccess: true);
+        }
+
+        private string BuildAggregatedText()
+        {
+            var sb = new StringBuilder();
+            foreach (var item in _contextItems)
+                sb.AppendLine(item.RawText);
+            return sb.ToString();
         }
 
         private async void BtnSendToLlm_Click(object sender, RoutedEventArgs e)
@@ -194,7 +185,6 @@ namespace DBAnalyzer
                 MessageBox.Show("Please enter a prompt.", "Empty Prompt", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-
             var apiUrl = TxtApiUrl.Text.Trim();
             if (string.IsNullOrWhiteSpace(apiUrl))
             {
@@ -203,11 +193,11 @@ namespace DBAnalyzer
             }
 
             BtnSendToLlm.IsEnabled = false;
+            BtnExportPdf.IsEnabled = false;
             SetBusy("Sending to LLM...");
             TxtLlmResponse.Text = "Waiting for response...";
 
-            var aggregatedData = TxtAggregatedData.Text;
-
+            var aggregatedData = BuildAggregatedText();
             var (response, error) = await _llmService.SendMessageAsync(apiUrl, aggregatedData, prompt);
 
             SetBusy(null);
@@ -222,6 +212,7 @@ namespace DBAnalyzer
             {
                 TxtLlmResponse.Text = response;
                 TxtLlmResponse.ScrollToEnd();
+                BtnExportPdf.IsEnabled = true;
                 SetStatus("LLM response received.", isSuccess: true);
             }
         }
@@ -229,6 +220,91 @@ namespace DBAnalyzer
         private void BtnClearResponse_Click(object sender, RoutedEventArgs e)
         {
             TxtLlmResponse.Text = string.Empty;
+            BtnExportPdf.IsEnabled = false;
+        }
+
+        private void BtnExportPdf_Click(object sender, RoutedEventArgs e)
+        {
+            var response = TxtLlmResponse.Text.Trim();
+            if (string.IsNullOrWhiteSpace(response))
+            {
+                MessageBox.Show("No LLM response to export.", "Nothing to Export", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var dlg = new SaveFileDialog
+            {
+                Title = "Save Analysis Report",
+                Filter = "PDF Files (*.pdf)|*.pdf",
+                FileName = $"Analysis_{DateTime.Now:yyyyMMdd_HHmmss}.pdf",
+                DefaultExt = ".pdf"
+            };
+
+            if (dlg.ShowDialog() != true) return;
+
+            try
+            {
+                SetBusy("Generating PDF...");
+                var prompt = TxtPrompt.Text.Trim();
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+                Document.Create(container =>
+                {
+                    container.Page(page =>
+                    {
+                        page.Size(PageSizes.A4);
+                        page.Margin(40);
+                        page.DefaultTextStyle(t => t.FontSize(11).FontFamily("Arial"));
+
+                        page.Header().Column(col =>
+                        {
+                            col.Item().Row(row =>
+                            {
+                                row.RelativeItem().Text("DB Analyzer — Analysis Report")
+                                    .FontSize(18).Bold().FontColor("#4A3FBF");
+                                row.ConstantItem(120).AlignRight()
+                                    .Text(timestamp).FontSize(9).FontColor("#888888");
+                            });
+                            col.Item().PaddingTop(4).LineHorizontal(1).LineColor("#CCCCCC");
+                        });
+
+                        page.Content().PaddingTop(16).Column(col =>
+                        {
+                            if (!string.IsNullOrWhiteSpace(prompt))
+                            {
+                                col.Item().Text("Prompt").FontSize(13).Bold().FontColor("#333333");
+                                col.Item().PaddingTop(4).PaddingBottom(12)
+                                    .Background("#F5F5FA").Padding(10)
+                                    .Text(prompt).FontSize(11).FontColor("#444444");
+                            }
+
+                            col.Item().Text("Analysis Result").FontSize(13).Bold().FontColor("#333333");
+                            col.Item().PaddingTop(4).Text(response).FontSize(11).LineHeight(1.5f);
+                        });
+
+                        page.Footer().AlignCenter()
+                            .Text(t =>
+                            {
+                                t.Span("Page ").FontSize(9).FontColor("#AAAAAA");
+                                t.CurrentPageNumber().FontSize(9).FontColor("#AAAAAA");
+                                t.Span(" / ").FontSize(9).FontColor("#AAAAAA");
+                                t.TotalPages().FontSize(9).FontColor("#AAAAAA");
+                            });
+                    });
+                }).GeneratePdf(dlg.FileName);
+
+                SetBusy(null);
+                SetStatus($"PDF saved: {dlg.FileName}", isSuccess: true);
+                MessageBox.Show($"PDF saved successfully:\n{dlg.FileName}", "Export Complete",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                SetBusy(null);
+                SetStatus($"PDF export failed: {ex.Message}", isSuccess: false);
+                MessageBox.Show($"Failed to generate PDF:\n{ex.Message}", "Export Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void SetBusy(string? message)
@@ -240,6 +316,7 @@ namespace DBAnalyzer
             }
             else
             {
+                TxtStatusBar.Text = "Ready";
                 LoadingProgress.Visibility = Visibility.Collapsed;
             }
         }

@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using DBAnalyzer.Models;
+using System.Linq;
 
 namespace DBAnalyzer.Services
 {
@@ -48,66 +49,41 @@ namespace DBAnalyzer.Services
             }
         }
 
-        public string DataTableToText(DataTable dataTable, string queryName = "")
+        public ContextItem DataTableToContextItem(DataTable dataTable, string queryName = "")
         {
-            if (dataTable == null || dataTable.Rows.Count == 0)
-                return string.IsNullOrEmpty(queryName) ? "No results returned." : $"[{queryName}] No results returned.";
+            var item = new ContextItem
+            {
+                Header = $"{queryName}  —  {dataTable.Rows.Count} row(s)"
+            };
 
+            var columns = dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToList();
+
+            foreach (DataRow row in dataTable.Rows)
+            {
+                var contextRow = new ContextRow();
+                foreach (var col in columns)
+                {
+                    var val = row[col]?.ToString() ?? "NULL";
+                    contextRow.Fields.Add(new ContextField { Key = col, Value = val });
+                }
+                item.Rows.Add(contextRow);
+            }
+
+            // Build plain text version for LLM context
             var sb = new StringBuilder();
-
-            if (!string.IsNullOrEmpty(queryName))
-                sb.AppendLine($"=== {queryName} ===");
-
-            // Calculate column widths
-            var colWidths = new int[dataTable.Columns.Count];
-            for (int i = 0; i < dataTable.Columns.Count; i++)
-            {
-                colWidths[i] = dataTable.Columns[i].ColumnName.Length;
-            }
-
+            sb.AppendLine($"[{queryName}]  ({dataTable.Rows.Count} rows)");
             foreach (DataRow row in dataTable.Rows)
             {
-                for (int i = 0; i < dataTable.Columns.Count; i++)
-                {
-                    var val = row[i]?.ToString() ?? "NULL";
-                    if (val.Length > colWidths[i])
-                        colWidths[i] = Math.Min(val.Length, 50);
-                }
+                foreach (var col in columns)
+                    sb.AppendLine($"  {col}: {row[col]?.ToString() ?? "NULL"}");
+                sb.AppendLine();
             }
+            item.RawText = sb.ToString();
 
-            // Header
-            var header = new StringBuilder("|");
-            var separator = new StringBuilder("+");
-            for (int i = 0; i < dataTable.Columns.Count; i++)
-            {
-                var colName = dataTable.Columns[i].ColumnName.PadRight(colWidths[i]);
-                header.Append($" {colName} |");
-                separator.Append(new string('-', colWidths[i] + 2) + "+");
-            }
-
-            sb.AppendLine(separator.ToString());
-            sb.AppendLine(header.ToString());
-            sb.AppendLine(separator.ToString());
-
-            // Rows
-            foreach (DataRow row in dataTable.Rows)
-            {
-                var rowSb = new StringBuilder("|");
-                for (int i = 0; i < dataTable.Columns.Count; i++)
-                {
-                    var val = (row[i]?.ToString() ?? "NULL");
-                    if (val.Length > 50) val = val.Substring(0, 47) + "...";
-                    val = val.PadRight(colWidths[i]);
-                    rowSb.Append($" {val} |");
-                }
-                sb.AppendLine(rowSb.ToString());
-            }
-
-            sb.AppendLine(separator.ToString());
-            sb.AppendLine($"({dataTable.Rows.Count} rows)");
-            sb.AppendLine();
-
-            return sb.ToString();
+            return item;
         }
+
+        public string DataTableToText(DataTable dataTable, string queryName = "")
+            => DataTableToContextItem(dataTable, queryName).RawText;
     }
 }

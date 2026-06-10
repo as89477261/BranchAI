@@ -92,100 +92,124 @@
                 <ColumnDefinition Width="0.7*" MinWidth="400"/>
             </Grid.ColumnDefinitions>
 
-            <!-- LEFT PANEL -->
+            <!-- LEFT PANEL — TabControl -->
             <Border Grid.Column="0"
                     Background="{StaticResource PanelBackground}"
                     BorderBrush="{StaticResource BorderBrush}"
                     BorderThickness="0,0,1,0">
-                <DockPanel Margin="12">
+                <TabControl Style="{StaticResource DarkTabControl}"
+                            Margin="0">
+                    <TabControl.Resources>
+                        <Style TargetType="TabPanel">
+                            <Setter Property="Background" Value="{StaticResource SecondaryBackground}"/>
+                        </Style>
+                    </TabControl.Resources>
 
-                    <!-- DB Connections Section -->
-                    <TextBlock DockPanel.Dock="Top"
-                               Style="{StaticResource SectionHeader}"
-                               Text="Database Connections"/>
+                    <!-- TAB 1: Connections -->
+                    <TabItem Header="  Connections  " Style="{StaticResource DarkTabItem}">
+                        <DockPanel Margin="12,10,12,12">
+                            <TextBlock DockPanel.Dock="Top"
+                                       Style="{StaticResource SectionHeader}"
+                                       Text="Database Connections"/>
 
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                        <Button Content="+ Add" Style="{StaticResource PrimaryButton}"
-                                Click="BtnAddConnection_Click" Margin="0,0,4,0"/>
-                        <Button Content="Remove" Style="{StaticResource SecondaryButton}"
-                                Click="BtnRemoveConnection_Click" Margin="0,0,4,0"/>
-                        <Button Content="Test" Style="{StaticResource SecondaryButton}"
-                                Click="BtnTestConnection_Click"/>
-                    </StackPanel>
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="+ Add" Style="{StaticResource PrimaryButton}"
+                                        Click="BtnAddConnection_Click" Margin="0,0,4,0"/>
+                                <Button Content="Remove" Style="{StaticResource SecondaryButton}"
+                                        Click="BtnRemoveConnection_Click" Margin="0,0,4,0"/>
+                                <Button Content="Test" Style="{StaticResource SecondaryButton}"
+                                        Click="BtnTestConnection_Click"/>
+                            </StackPanel>
 
-                    <ListBox DockPanel.Dock="Top"
-                             x:Name="LstConnections"
-                             Style="{StaticResource DarkListBox}"
-                             ItemContainerStyle="{StaticResource DarkListBoxItem}"
-                             Height="140"
-                             Margin="0,0,0,12"
-                             SelectionChanged="LstConnections_SelectionChanged"/>
+                            <TextBlock DockPanel.Dock="Top"
+                                       Style="{StaticResource SectionLabel}"
+                                       Text="SAVED CONNECTIONS"
+                                       Margin="0,0,0,4"/>
 
-                    <!-- SQL Query Section -->
-                    <TextBlock DockPanel.Dock="Top"
-                               Style="{StaticResource SectionHeader}"
-                               Text="SQL Query"/>
+                            <ListBox x:Name="LstConnections"
+                                     DockPanel.Dock="Top"
+                                     Style="{StaticResource DarkListBox}"
+                                     ItemContainerStyle="{StaticResource DarkListBoxItem}"
+                                     MinHeight="80"
+                                     SelectionChanged="LstConnections_SelectionChanged"/>
+                        </DockPanel>
+                    </TabItem>
 
-                    <TextBlock DockPanel.Dock="Top"
-                               Style="{StaticResource SectionLabel}"
-                               Text="Selected Connection:"/>
+                    <!-- TAB 2: Query -->
+                    <TabItem Header="  SQL Query  " Style="{StaticResource DarkTabItem}">
+                        <DockPanel Margin="12,10,12,12">
 
-                    <TextBlock DockPanel.Dock="Top"
-                               x:Name="TxtSelectedConnection"
-                               Foreground="{StaticResource AccentColor}"
-                               FontSize="12"
-                               Text="None selected"
-                               Margin="0,0,0,6"/>
+                            <!-- Selected Connection badge -->
+                            <Border DockPanel.Dock="Top"
+                                    Background="#2D2D45"
+                                    BorderBrush="{StaticResource AccentColor}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="8,6"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionLabel}"
+                                               Text="ACTIVE CONNECTION" Margin="0,0,0,2"/>
+                                    <TextBlock x:Name="TxtSelectedConnection"
+                                               Foreground="{StaticResource AccentColor}"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Text="— None selected —"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
 
-                    <TextBlock DockPanel.Dock="Top"
-                               Style="{StaticResource SectionLabel}"
-                               Text="SQL Query:"/>
+                            <!-- SQL Query input -->
+                            <TextBlock DockPanel.Dock="Top"
+                                       Style="{StaticResource SectionLabel}"
+                                       Text="SQL QUERY"/>
+                            <TextBox DockPanel.Dock="Top"
+                                     x:Name="TxtQuery"
+                                     Style="{StaticResource DarkTextBox}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="NoWrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     HorizontalScrollBarVisibility="Auto"
+                                     Height="110"
+                                     FontFamily="Consolas"
+                                     FontSize="12"
+                                     Text="SELECT TOP 100 * FROM "
+                                     Margin="0,0,0,6"/>
 
-                    <TextBox DockPanel.Dock="Top"
-                             x:Name="TxtQuery"
-                             Style="{StaticResource DarkTextBox}"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto"
-                             Height="100"
-                             FontFamily="Consolas"
-                             FontSize="12"
-                             Text="SELECT TOP 100 * FROM "
-                             Margin="0,0,0,6"/>
+                            <Button DockPanel.Dock="Top"
+                                    Content="▶  Run Query"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Click="BtnRunQuery_Click"
+                                    Margin="0,0,0,10"
+                                    HorizontalAlignment="Left"/>
 
-                    <Button DockPanel.Dock="Top"
-                            Content="Run Query"
-                            Style="{StaticResource PrimaryButton}"
-                            Click="BtnRunQuery_Click"
-                            Margin="0,0,0,12"
-                            HorizontalAlignment="Left"/>
+                            <!-- Query Results -->
+                            <TextBlock DockPanel.Dock="Top"
+                                       Style="{StaticResource SectionHeader}"
+                                       Text="Query Results"/>
 
-                    <!-- Query Results -->
-                    <TextBlock DockPanel.Dock="Top"
-                               Style="{StaticResource SectionHeader}"
-                               Text="Query Results"/>
+                            <TextBlock DockPanel.Dock="Top"
+                                       x:Name="TxtQueryResultInfo"
+                                       Foreground="{StaticResource TextSecondary}"
+                                       FontSize="11"
+                                       Margin="0,0,0,4"
+                                       Text=""/>
 
-                    <TextBlock DockPanel.Dock="Top"
-                               x:Name="TxtQueryResultInfo"
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="11"
-                               Margin="0,0,0,4"
-                               Text=""/>
-
-                    <DataGrid x:Name="DgResults"
-                              Style="{StaticResource DarkDataGrid}"
-                              ColumnHeaderStyle="{StaticResource DarkDataGridColumnHeader}"
-                              AutoGenerateColumns="True"
-                              IsReadOnly="True"
-                              CanUserAddRows="False"
-                              CanUserDeleteRows="False"
-                              SelectionMode="Extended"
-                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto"
-                              FontSize="12"
-                              Foreground="{StaticResource TextPrimary}"/>
-
-                </DockPanel>
+                            <DataGrid x:Name="DgResults"
+                                      Style="{StaticResource DarkDataGrid}"
+                                      ColumnHeaderStyle="{StaticResource DarkDataGridColumnHeader}"
+                                      AutoGenerateColumns="True"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"
+                                      SelectionMode="Extended"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                      FontSize="12"
+                                      Foreground="{StaticResource TextPrimary}"/>
+                        </DockPanel>
+                    </TabItem>
+                </TabControl>
             </Border>
 
             <!-- Splitter -->
@@ -196,16 +220,16 @@
                     Background="{StaticResource PanelBackground}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="0.35*" MinHeight="120"/>
+                        <RowDefinition Height="0.32*" MinHeight="120"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="0.25*" MinHeight="100"/>
+                        <RowDefinition Height="0.22*" MinHeight="90"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="0.4*" MinHeight="120"/>
+                        <RowDefinition Height="0.46*" MinHeight="120"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Aggregated Data -->
+                    <!-- Aggregated Data Context -->
                     <DockPanel Grid.Row="0">
-                        <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -225,33 +249,76 @@
                                     Style="{StaticResource SecondaryButton}"
                                     Click="BtnClearContext_Click"/>
                         </Grid>
-                        <TextBox DockPanel.Dock="Top"
-                                 x:Name="TxtAggregatedData"
-                                 Style="{StaticResource DarkTextBox}"
-                                 IsReadOnly="True"
-                                 AcceptsReturn="True"
-                                 TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto"
-                                 HorizontalScrollBarVisibility="Auto"
-                                 FontFamily="Consolas"
-                                 FontSize="11"
-                                 Background="#16162A"
-                                 Foreground="#A0C4FF"
-                                 Text=""/>
+
+                        <!-- Context items list — cleaner card view -->
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="ContextItemsPanel">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#1E1E32"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Margin="0,0,0,6"
+                                                Padding="10,8">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Header}"
+                                                           Foreground="{StaticResource AccentColor}"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Margin="0,0,0,4"/>
+                                                <ItemsControl ItemsSource="{Binding Rows}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="#25253A"
+                                                                    CornerRadius="3"
+                                                                    Padding="8,5"
+                                                                    Margin="0,0,0,3">
+                                                                <ItemsControl ItemsSource="{Binding Fields}">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                                                                <TextBlock Text="{Binding Key}"
+                                                                                           Foreground="{StaticResource TextSecondary}"
+                                                                                           FontSize="11"
+                                                                                           MinWidth="140"
+                                                                                           FontFamily="Consolas"/>
+                                                                                <TextBlock Text=" : "
+                                                                                           Foreground="{StaticResource BorderBrush}"
+                                                                                           FontSize="11"/>
+                                                                                <TextBlock Text="{Binding Value}"
+                                                                                           Foreground="{StaticResource TextPrimary}"
+                                                                                           FontSize="11"
+                                                                                           FontFamily="Consolas"
+                                                                                           TextWrapping="Wrap"/>
+                                                                            </StackPanel>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
                     </DockPanel>
 
                     <!-- Divider -->
                     <Border Grid.Row="1" Height="1"
                             Background="{StaticResource BorderBrush}"
-                            Margin="0,6"/>
+                            Margin="0,4"/>
 
-                    <!-- Prompt -->
+                    <!-- Analysis Prompt -->
                     <DockPanel Grid.Row="2">
                         <TextBlock DockPanel.Dock="Top"
                                    Style="{StaticResource SectionHeader}"
                                    Text="Analysis Prompt"/>
-                        <TextBox DockPanel.Dock="Top"
-                                 x:Name="TxtPrompt"
+                        <TextBox x:Name="TxtPrompt"
                                  Style="{StaticResource DarkTextBox}"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
@@ -260,10 +327,10 @@
                                  Text="Analyze the data above and provide insights."/>
                     </DockPanel>
 
-                    <!-- Send Button Row -->
+                    <!-- Action Button Row -->
                     <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,6">
                         <Button x:Name="BtnSendToLlm"
-                                Content="Send to LLM"
+                                Content="▶  Send to LLM"
                                 Style="{StaticResource PrimaryButton}"
                                 Click="BtnSendToLlm_Click"
                                 Padding="16,8"
@@ -271,7 +338,13 @@
                                 Margin="0,0,8,0"/>
                         <Button Content="Clear Response"
                                 Style="{StaticResource SecondaryButton}"
-                                Click="BtnClearResponse_Click"/>
+                                Click="BtnClearResponse_Click"
+                                Margin="0,0,8,0"/>
+                        <Button x:Name="BtnExportPdf"
+                                Content="Export PDF"
+                                Style="{StaticResource SecondaryButton}"
+                                Click="BtnExportPdf_Click"
+                                IsEnabled="False"/>
                     </StackPanel>
 
                     <!-- LLM Response -->
@@ -279,8 +352,7 @@
                         <TextBlock DockPanel.Dock="Top"
                                    Style="{StaticResource SectionHeader}"
                                    Text="LLM Response"/>
-                        <TextBox DockPanel.Dock="Top"
-                                 x:Name="TxtLlmResponse"
+                        <TextBox x:Name="TxtLlmResponse"
                                  Style="{StaticResource DarkTextBox}"
                                  IsReadOnly="True"
                                  AcceptsReturn="True"
@@ -291,7 +363,6 @@
                                  Foreground="#E8E8FF"
                                  Text=""/>
                     </DockPanel>
-
                 </Grid>
             </Border>
         </Grid>
